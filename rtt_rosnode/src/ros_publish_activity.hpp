@@ -38,6 +38,7 @@
 #include <ros/ros.h>
 
 namespace ros_integration{
+  using namespace RTT;
   
     /**
      * The interface a channel element must implement in
@@ -74,11 +75,21 @@ namespace ros_integration{
       //! insertion/removal happens concurrently.
       typedef std::map< RosPublisher*, bool> Publishers;
       Publishers publishers;
-      RTT::os::Mutex map_lock;
+      os::Mutex map_lock;
 
-    RosPublishActivity( const std::string& name);
+    RosPublishActivity( const std::string& name)
+      : Activity(0, name)
+    {
+      Logger::In in("RosPublishActivity");
+      log(Debug)<<"Creating RosPublishActivity"<<endlog();
+    }
 
-    void loop();
+    void loop(){
+        os::MutexLock lock(map_lock);
+        for(Publishers::const_iterator it = publishers.begin(); it != publishers.end(); ++it)
+            if (it->second)
+                it->first->publish();
+    }
     
   public:
 
@@ -89,19 +100,47 @@ namespace ros_integration{
        * such that, in the unlikely event that two publishers exist,
        * you consistently keep using the same instance, which is fine then.
        */
-      static shared_ptr Instance();
+      static shared_ptr Instance() {
+          shared_ptr ret = ros_pub_act.lock();
+          if ( !ret ) {
+              ret.reset(new RosPublishActivity("RosPublishActivity"));
+              ros_pub_act = ret;
+              ret->start();
+          }
+          return ret;
+      }
       
-      void addPublisher(RosPublisher* pub);
-      void removePublisher(RosPublisher* pub);
+      void addPublisher(RosPublisher* pub) {
+          os::MutexLock lock(map_lock);
+          publishers[pub] = false;
+      }
+
+      void removePublisher(RosPublisher* pub) {
+          os::MutexLock lock(map_lock);
+          publishers.erase(pub);
+      }
     
       /**
        * Requests to publish the data of a given channel.
        * Note that multiple calls to requestPublish may 
        * cause only a single call to RosPublisher::publish().
        */
-      bool requestPublish(RosPublisher* chan);
-
-      ~RosPublishActivity();
+      bool requestPublish(RosPublisher* chan){
+          // flag that data is available in a channel:
+          {
+              os::MutexLock lock(map_lock);
+              assert(publishers.find(chan) != publishers.end() );
+              publishers.find(chan)->second = true;
+          }
+          // trigger loop()
+          this->trigger();
+          return true;
+      }
+      ~RosPublishActivity() {
+          Logger::In in("RosPublishActivity");
+          log(Info) << "RosPublishActivity cleans up: no more work."<<endlog();
+          stop();
+      }
       
   };//class
 }//namespace
