@@ -99,7 +99,12 @@ namespace ros_integration {
       }
       topicname=policy.name_id;
       Logger::In in(topicname);
-      log(Debug)<<"Creating ROS publisher for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
+
+      if (port->getInterface() && port->getInterface()->getOwner()) {
+        log(Debug)<<"Creating ROS publisher for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
+      } else {
+        log(Debug)<<"Creating ROS publisher for port "<<port->getName()<<" on topic "<<policy.name_id<<endlog();
+      }
 
       ros_pub = ros_node.advertise<T>(policy.name_id, policy.size);
       act = RosPublishActivity::Instance();
