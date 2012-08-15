@@ -9,7 +9,9 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/rtt_rosnode</url>
   <depend package="roscpp"/>
+  <depend package="roslib"/>
   <depend package="rtt"/>
+  <depend package="rtt_rospack"/>
   <depend package="ocl"/>
   <depend package="rosbuild"/>
 

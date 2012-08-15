@@ -76,9 +76,27 @@ namespace ros_integration{
       Publishers publishers;
       RTT::os::Mutex map_lock;
 
+<<<<<<< HEAD
     RosPublishActivity( const std::string& name);
 
     void loop();
+=======
+    RosPublishActivity( const std::string& name)
+        : Activity(ORO_SCHED_OTHER, RTT::os::LowestPriority, 0.0, 0, name)
+    {
+      Logger::In in("RosPublishActivity");
+      log(Debug)<<"Creating RosPublishActivity"<<endlog();
+    }
+
+    void loop(){
+        os::MutexLock lock(map_lock);
+        for(Publishers::iterator it = publishers.begin(); it != publishers.end(); ++it)
+            if (it->second) {
+                it->second = false; // protected by the mutex lock !
+                it->first->publish();
+            }
+    }
+>>>>>>> 5ed5eb798f37e446a2018e3925f2515f972bece9
     
   public:
 

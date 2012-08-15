@@ -36,7 +36,7 @@ namespace ros_integration {
     RosPublishActivity::weak_ptr RosPublishActivity::ros_pub_act;
 
     RosPublishActivity::RosPublishActivity( const std::string& name)
-      : Activity(0, name)
+        : Activity(ORO_SCHED_OTHER, RTT::os::LowestPriority, 0.0, 0, name)
     {
       Logger::In in("RosPublishActivity");
       log(Debug)<<"Creating RosPublishActivity"<<endlog();
@@ -44,9 +44,11 @@ namespace ros_integration {
 
     void RosPublishActivity::loop(){
         os::MutexLock lock(map_lock);
-        for(Publishers::const_iterator it = publishers.begin(); it != publishers.end(); ++it)
-            if (it->second)
+        for(Publishers::iterator it = publishers.begin(); it != publishers.end(); ++it)
+            if (it->second) {
+                it->second = false; // protected by the mutex lock !
                 it->first->publish();
+            }
     }
 
     RosPublishActivity::shared_ptr RosPublishActivity::Instance() {

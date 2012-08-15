@@ -93,24 +93,15 @@ namespace ros_integration {
 	std::stringstream namestr;
 	gethostname(hostname, sizeof(hostname));
 	
-	if (port->getInterface() && port->getInterface()->getOwner()) {
-	  namestr << hostname<<'/' << port->getInterface()->getOwner()->getName()
-		  << '/' << port->getName() << '/'<<this << '/' << getpid();
-	} else {
-	  namestr << hostname<<'/' << port->getName() << '/'<<this << '/' << getpid();
-	}
+	namestr << hostname<<'/' << port->getInterface()->getOwner()->getName()
+		<< '/' << port->getName() << '/'<<this << '/' << getpid();
 	policy.name_id = namestr.str();
       }
       topicname=policy.name_id;
       Logger::In in(topicname);
+      log(Debug)<<"Creating ROS publisher for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
 
-      if (port->getInterface() && port->getInterface()->getOwner()) {
-        log(Debug)<<"Creating ROS publisher for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
-      } else {
-        log(Debug)<<"Creating ROS publisher for port "<<port->getName()<<" on topic "<<policy.name_id<<endlog();
-      }
-
-      ros_pub = ros_node.advertise<T>(policy.name_id, policy.size);
+      ros_pub = ros_node.advertise<T>(policy.name_id, policy.size ? policy.size : 1); // minimum 1
       act = RosPublishActivity::Instance();
       act->addPublisher( this );
     }
@@ -157,7 +148,7 @@ namespace ros_integration {
       typename base::ChannelElement<T>::value_t sample; // XXX: real-time !
       // this read should always succeed since signal() means 'data available in a data element'.
       typename base::ChannelElement<T>::shared_ptr input = this->getInput();
-      while( input && (input->read(sample,true) == NewData) )
+      while( input && (input->read(sample,false) == NewData) )
           ros_pub.publish(sample);
     }
     
@@ -168,9 +159,7 @@ namespace ros_integration {
   {
     ros::NodeHandle ros_node;
     ros::Subscriber ros_sub;
-//    bool newdata,init;
-//    base::DataObjectLockFree<T> m_msg;
-
+    
   public:
     /** 
      * Contructor of to create ROS subscriber ChannelElement, it will
@@ -182,20 +171,13 @@ namespace ros_integration {
      * @return ChannelElement that will publish data to topics
      */
     RosSubChannelElement(base::PortInterface* port, const ConnPolicy& policy)
-    //:newdata(false),init(false)
     {
-      if (port->getInterface() && port->getInterface()->getOwner()) {
-        log(Debug)<<"Creating ROS subscriber for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
-      } else {
-        log(Debug)<<"Creating ROS subscriber for port "<<port->getName()<<" on topic "<<policy.name_id<<endlog();
-      }
+      log(Debug)<<"Creating ROS subscriber for port "<<port->getInterface()->getOwner()->getName()<<"."<<port->getName()<<" on topic "<<policy.name_id<<endlog();
       ros_sub=ros_node.subscribe(policy.name_id,policy.size,&RosSubChannelElement::newData,this);
-      // this->ref();
+      this->ref();
     }
 
     ~RosSubChannelElement() {
-      Logger::In in(ros_sub.getTopic());
-      log(Debug)<<"Destroying RosSubChannelElement"<<endlog();
     }
 
     virtual bool inputReady() {
@@ -207,56 +189,27 @@ namespace ros_integration {
      * @param msg The received message
      */
     void newData(const T& msg){
-//      const std_msgs::Header *header = ros::message_traits::header(msg);
-//      log(Debug) << "Received a " << ros::message_traits::datatype(msg) << " message on topic " << ros_sub.getTopic() << " with sequence number " << (header ? header->seq : 0) << endlog();
-//      m_msg.Set(msg);
-//      newdata=true;
-//      init=true;
-      this->write(msg);
-//      if (!this->write(msg)) {
-//        log(Debug) << "Error while writing a " << ros::message_traits::datatype(msg) << " message on topic " << ros_sub.getTopic() << " with sequence number " << (header ? header->seq : 0) << endlog();
-//      }
+      typename base::ChannelElement<T>::shared_ptr output = this->getOutput();
+      if (output)
+          output->write(msg);
     }
-
-    /** 
-     * function that the port will use to get the received data
-     * 
-     * @param sample object to put the received data into
-     * 
-     * @return FlowStatus for the port
-     */
-//    FlowStatus read(typename base::ChannelElement<T>::reference_t sample, bool copy_old_data)
-//    {
-//      if(!init)
-//        return NoData;
-
-//      if(newdata){
-//        newdata=false;
-//        sample=m_msg.Get();
-//        return NewData;
-//      }
-//      else
-//        if(copy_old_data)
-//          sample=m_msg.Get();
-//        return OldData;
-//    }
   };
 
-  template <class T>
-  class RosMsgTransporter : public RTT::types::TypeTransporter{
-    virtual base::ChannelElementBase::shared_ptr createStream (base::PortInterface *port, const ConnPolicy &policy, bool is_sender) const{
-      if(is_sender){
-        base::ChannelElementBase::shared_ptr buf = internal::ConnFactory::buildDataStorage<T>(policy);
-        base::ChannelElementBase::shared_ptr tmp = base::ChannelElementBase::shared_ptr(new RosPubChannelElement<T>(port,policy));
-        buf->setOutput(tmp);
-        return buf;
-      } else {
-        // ConnPolicy::data() would be sufficient here...
-        base::ChannelElementBase::shared_ptr buf = internal::ConnFactory::buildDataStorage<T>(policy);
-        base::ChannelElementBase::shared_ptr tmp = base::ChannelElementBase::shared_ptr(new RosSubChannelElement<T>(port,policy));
-        tmp->setOutput(buf);
-        return tmp;
-      }
+    template <class T>
+    class RosMsgTransporter : public RTT::types::TypeTransporter{
+        virtual base::ChannelElementBase::shared_ptr createStream (base::PortInterface *port, const ConnPolicy &policy, bool is_sender) const{
+            base::ChannelElementBase* buf = internal::ConnFactory::buildDataStorage<T>(policy);
+            base::ChannelElementBase::shared_ptr tmp;
+            if(is_sender){
+                tmp = base::ChannelElementBase::shared_ptr(new RosPubChannelElement<T>(port,policy));
+                buf->setOutput(tmp);
+                return buf;
+            }
+            else {
+                tmp = new RosSubChannelElement<T>(port,policy);
+                tmp->setOutput(buf);
+                return tmp;
+            }
     }
   };
 } 
