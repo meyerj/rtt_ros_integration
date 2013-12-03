@@ -5,8 +5,6 @@
 
 cmake_minimum_required(VERSION 2.8.3)
 
-set(CMAKE_BUILD_TYPE MinSizeRel)
-
 include(AddFileDependencies)
 
 macro(rtt_roscomm_destinations)
@@ -41,13 +39,13 @@ macro(rtt_roscomm_debug)
   endif()
 endmacro()
 
-macro(ros_generate_rtt_typekit package)
+function(ros_generate_rtt_typekit package)
   find_package(OROCOS-RTT 2.0.0 COMPONENTS rtt-scripting rtt-marshalling)
   if (NOT OROCOS-RTT_FOUND)
     message(FATAL_ERROR "\n   RTT not found. Is the version correct? Use the CMAKE_PREFIX_PATH cmake or environment variable to point to the installation directory of RTT.")
   else()
     include(${OROCOS-RTT_USE_FILE_PATH}/UseOROCOS-RTT.cmake)
-    add_definitions( -DRTT_COMPONENT )
+    #add_definitions( -DRTT_COMPONENT )
   endif()
 
   # Configure source and destination paths of generated files
@@ -201,6 +199,7 @@ macro(ros_generate_rtt_typekit package)
       ${catkin_INCLUDE_DIRS})
 
     # Targets
+    set(CMAKE_BUILD_TYPE MinSizeRel)
     orocos_typekit(         rtt-${package}-typekit ${_template_types_dst_dir}/ros_${package}_typekit.cpp ${ROSMSG_TYPEKIT_PLUGINS})
     orocos_typekit(         rtt-${package}-ros-transport ${_template_types_dst_dir}/ros_${package}_transport.cpp )
     target_link_libraries(  rtt-${package}-typekit ${catkin_LIBRARIES})
@@ -237,26 +236,31 @@ macro(ros_generate_rtt_typekit package)
         DESTINATION "${rtt_roscomm_GENERATED_HEADERS_INSTALL_DESTINATION}/orocos")
     endif()
 
-    list(APPEND RTT_ROSCOMM_GENERATED_TARGETS 
-      rtt-${package}-typekit
-      rtt-${package}-ros-transport
-      )
+    #list(APPEND RTT_ROSCOMM_GENERATED_TARGETS 
+    #  rtt-${package}-typekit
+    #  rtt-${package}-ros-transport
+    #  )
+
+    # Export variables to the PARENT_SCOPE
+    set(OROCOS_DEFINED_TYPES ${OROCOS_DEFINED_TYPES} PARENT_SCOPE)
+    set(${PROJECT_NAME}_EXPORTED_TARGETS ${${PROJECT_NAME}_EXPORTED_TARGETS} PARENT_SCOPE)
+    set(${PROJECT_NAME}_EXPORTED_INCLUDE_DIRS ${${PROJECT_NAME}_EXPORTED_INCLUDE_DIRS} PARENT_SCOPE)
 
   else()
     # Return if nothing to do
     message(STATUS "ros_generate_rtt_typekit: Could not find any .msg files in the ${package} package.")
   endif()
 
-endmacro(ros_generate_rtt_typekit)
+endfunction(ros_generate_rtt_typekit)
 
 
-macro(ros_generate_rtt_service_proxies package)
+function(ros_generate_rtt_service_proxies package)
   find_package(OROCOS-RTT 2.0.0 COMPONENTS rtt-scripting rtt-marshalling)
   if (NOT OROCOS-RTT_FOUND)
     message(FATAL_ERROR "\n   RTT not found. Is the version correct? Use the CMAKE_PREFIX_PATH cmake or environment variable to point to the installation directory of RTT.")
   else()
     include(${OROCOS-RTT_USE_FILE_PATH}/UseOROCOS-RTT.cmake)
-    add_definitions( -DRTT_COMPONENT )
+    #add_definitions( -DRTT_COMPONENT )
   endif()
 
   # Configure source and destination paths of generated files
@@ -334,6 +338,7 @@ macro(ros_generate_rtt_service_proxies package)
       ${catkin_INCLUDE_DIRS})
 
     # Targets
+    set(CMAKE_BUILD_TYPE MinSizeRel)
     orocos_service(         rtt_${ROSPACKAGE}_ros_service_proxies ${_template_proxies_dst_dir}/rtt_ros_service_proxies.cpp)
     target_link_libraries(  rtt_${ROSPACKAGE}_ros_service_proxies ${catkin_LIBRARIES})
     if(DEFINED ${package}_EXPORTED_TARGETS)
@@ -346,9 +351,14 @@ macro(ros_generate_rtt_service_proxies package)
     set_directory_properties(PROPERTIES 
       ADDITIONAL_MAKE_CLEAN_FILES "${_additional_make_clean_files}")
 
+    # Export variables to the PARENT_SCOPE
+    set(OROCOS_DEFINED_PLUGINS ${OROCOS_DEFINED_PLUGINS} PARENT_SCOPE)
+    set(${PROJECT_NAME}_EXPORTED_TARGETS ${${PROJECT_NAME}_EXPORTED_TARGETS} PARENT_SCOPE)
+    set(${PROJECT_NAME}_EXPORTED_INCLUDE_DIRS ${${PROJECT_NAME}_EXPORTED_INCLUDE_DIRS} PARENT_SCOPE)
+
   else()
     #Return if nothing to do:
     message(STATUS "ros_generate_rtt_service_proxies: Could not find any .srv files in the ${package} package.")
   endif()
   
-endmacro(ros_generate_rtt_service_proxies)
+endfunction(ros_generate_rtt_service_proxies)
