@@ -53,6 +53,7 @@ class DynamicReconfigureTestComponent : public RTT::TaskContext
 public:
     Properties props;
     bool updatePropertiesCalled, updatePropertiesConstCalled, notifyPropertiesUpdateCalled;
+    RTT::PropertyBag updatedProperties;
 
     // types directly supported by dynamic_reconfigure
     DynamicReconfigureTestComponent(const std::string &name = "component")
@@ -80,12 +81,16 @@ public:
 
     bool updateProperties(RTT::PropertyBag &bag, uint32_t) {
         RTT::log(RTT::Info) << "updateProperties() callback called." << RTT::endlog();
+        updatedProperties.clear();
+        RTT::copyProperties(updatedProperties, bag);
         updatePropertiesCalled = true;
         return RTT::updateProperties(*properties(), bag);
     }
 
     bool updatePropertiesConst(const RTT::PropertyBag &bag, uint32_t) {
         RTT::log(RTT::Info) << "updatePropertiesConst() callback called." << RTT::endlog();
+        updatedProperties.clear();
+        RTT::copyProperties(updatedProperties, bag);
         updatePropertiesConstCalled = true;
         return RTT::updateProperties(*properties(), bag);
     }

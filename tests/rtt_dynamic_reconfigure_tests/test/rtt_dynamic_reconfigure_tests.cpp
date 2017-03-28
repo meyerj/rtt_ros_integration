@@ -170,14 +170,54 @@ TEST_F(DynamicReconfigureTest, UpdatePropertiesCallback)
   EXPECT_TRUE(tc.updatePropertiesCalled);
   EXPECT_FALSE(tc.updatePropertiesConstCalled);
   EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+  static const size_t numberOfReconfigurableProperties = tc.provides("reconfigure")->properties()->getPropertyType<RTT::PropertyBag>("default")->rvalue().size();
+  EXPECT_EQ(numberOfReconfigurableProperties, tc.updatedProperties.size());
   tc.updatePropertiesCalled = false;
 
-  // check actual callback
-  dynamic_reconfigure::Reconfigure reconfigure;
-  EXPECT_TRUE(tc.setConfigCallback("reconfigure", reconfigure.request, reconfigure.response));
-  EXPECT_TRUE(tc.updatePropertiesCalled);
-  EXPECT_FALSE(tc.updatePropertiesConstCalled);
-  EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+  // check callback
+  {
+    dynamic_reconfigure::Reconfigure reconfigure;
+    EXPECT_TRUE(tc.setConfigCallback("reconfigure", reconfigure.request, reconfigure.response));
+    EXPECT_TRUE(tc.updatePropertiesCalled);
+    EXPECT_FALSE(tc.updatePropertiesConstCalled);
+    EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+    EXPECT_EQ(0, tc.updatedProperties.size()); // nothing has been updated
+    tc.updatePropertiesCalled = false;
+  }
+
+  // check callback with one updated property
+  {
+    dynamic_reconfigure::StrParameter update_str_param;
+    update_str_param.name = "str_param";
+    update_str_param.value = "new value";
+    dynamic_reconfigure::Reconfigure reconfigure;
+    reconfigure.request.config.strs.push_back(update_str_param);
+    EXPECT_TRUE(tc.setConfigCallback("reconfigure", reconfigure.request, reconfigure.response));
+    EXPECT_TRUE(tc.updatePropertiesCalled);
+    EXPECT_FALSE(tc.updatePropertiesConstCalled);
+    EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+    EXPECT_EQ(1, tc.updatedProperties.size()); // str_param has been updated
+    ASSERT_TRUE(tc.updatedProperties.getPropertyType<std::string>("str_param"));
+    EXPECT_EQ(update_str_param.value, tc.updatedProperties.getPropertyType<std::string>("str_param")->rvalue());
+  }
+
+  // check callback with one partially updated composed property
+  {
+    dynamic_reconfigure::DoubleParameter update_vector3_param__x;
+    update_vector3_param__x.name = "vector3_param__x";
+    update_vector3_param__x.value = 10.0;
+    dynamic_reconfigure::Reconfigure reconfigure;
+    reconfigure.request.config.doubles.push_back(update_vector3_param__x);
+    EXPECT_TRUE(tc.setConfigCallback("reconfigure", reconfigure.request, reconfigure.response));
+    EXPECT_TRUE(tc.updatePropertiesCalled);
+    EXPECT_FALSE(tc.updatePropertiesConstCalled);
+    EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+    EXPECT_EQ(1, tc.updatedProperties.size()); // vector3_param has been updated
+    ASSERT_TRUE(tc.updatedProperties.getPropertyType<RTT::PropertyBag>("vector3_param"));
+    const RTT::PropertyBag &vector3_bag = tc.updatedProperties.getPropertyType<RTT::PropertyBag>("vector3_param")->rvalue();
+    ASSERT_TRUE(vector3_bag.getPropertyType<double>("x"));
+    EXPECT_EQ(update_vector3_param__x.value, vector3_bag.getPropertyType<double>("x")->rvalue());
+  }
 }
 
 TEST_F(DynamicReconfigureTest, UpdatePropertiesConstCallback)
@@ -193,6 +233,8 @@ TEST_F(DynamicReconfigureTest, UpdatePropertiesConstCallback)
   EXPECT_FALSE(tc.updatePropertiesCalled);
   EXPECT_TRUE(tc.updatePropertiesConstCalled);
   EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+  static const size_t numberOfReconfigurableProperties = tc.provides("reconfigure")->properties()->getPropertyType<RTT::PropertyBag>("default")->rvalue().size();
+  EXPECT_EQ(numberOfReconfigurableProperties, tc.updatedProperties.size());
   tc.updatePropertiesConstCalled = false;
 
   // check actual callback
@@ -201,6 +243,7 @@ TEST_F(DynamicReconfigureTest, UpdatePropertiesConstCallback)
   EXPECT_FALSE(tc.updatePropertiesCalled);
   EXPECT_TRUE(tc.updatePropertiesConstCalled);
   EXPECT_FALSE(tc.notifyPropertiesUpdateCalled);
+  EXPECT_EQ(0, tc.updatedProperties.size()); // nothing has been updated
 }
 
 TEST_F(DynamicReconfigureTest, NotifyPropertiesUpdateCallback)

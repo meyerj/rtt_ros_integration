@@ -145,6 +145,15 @@ struct dynamic_reconfigure_traits {
     static void fromMessage(ConfigType &config, dynamic_reconfigure::Config &message, const ServerType *) { config.__fromMessage__(message); }
 
     /**
+     * Update an instance of ConfigType with the values of another
+     *
+     * \param target reference to the target ConfigType instance
+     * \param source const-reference to the source ConfigType instance
+     * \param server pointer to the rtt_dynamic_reconfigure server instance (only used for AutoConfig)
+     */
+    static bool update(ConfigType &target, const ConfigType &source, const ServerType *) { target = source; return true; }
+
+    /**
      * Clamp the values in the ConfigType instance to the limits given in the config description/properties
      *
      * \param config referencte to the ConfigType instance to be clamped
@@ -467,7 +476,7 @@ public:
 
         // Get initial values from current property settings
         config_ = ConfigType();
-        traits::getDefault(config_, this);
+        config_ = default_; // clone semantics for AutoConfig
         updater()->configFromProperties(config_, *(getOwner()->properties()));
         if (node_handle_)
             config_.__fromServer__(*node_handle_);
@@ -635,7 +644,8 @@ private:
     {
         RTT::os::MutexLock lock(mutex_);
 
-        ConfigType new_config = config_;
+//        ConfigType new_config = config_;
+        ConfigType new_config;
         traits::fromMessage(new_config, req.config, this);
         traits::clamp(new_config, this);
         uint32_t level = config_.__level__(new_config);
@@ -660,11 +670,11 @@ private:
     void updateConfigInternal(const ConfigType &config)
     {
         RTT::os::MutexLock lock(mutex_);
-        config_ = config;
+        traits::update(config_, config, this);
         if (node_handle_)
             config_.__toServer__(*node_handle_);
         dynamic_reconfigure::Config msg;
-        config_.__toMessage__(msg);
+        config.__toMessage__(msg);
 
         if (update_pub_)
             update_pub_.publish(msg);

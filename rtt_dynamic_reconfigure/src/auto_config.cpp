@@ -65,7 +65,20 @@ public:
 
     typedef boost::intrusive_ptr<AutoConfigDataSource> shared_ptr;
 
-    AutoConfigDataSource(const AutoConfig &data) : mdata(data) {}
+    explicit AutoConfigDataSource(const AutoConfig &data) : mdata(data) {}
+    explicit AutoConfigDataSource(RTT::base::DataSourceBase *dsb) {
+        AutoConfigDataSource *ds = narrow(dsb);
+        if (ds) {
+            mdata = ds->rvalue();
+        } else {
+            RTT::internal::DataSource<RTT::PropertyBag>* bag_ds = RTT::internal::DataSource<RTT::PropertyBag>::narrow(dsb);
+            if (bag_ds) {
+                mdata = bag_ds->rvalue();
+            } else {
+                RTT::log(RTT::Error) << "Tried to construct an AutoConfigDataSource from a DataSourceBase which is neither an AutoConfigDataSource nor a PropertyBag data source." << RTT::endlog();
+            }
+        }
+    }
     AutoConfigDataSource() {}
 
     RTT::internal::DataSource<RTT::PropertyBag>::result_t get() const { return mdata; }
@@ -77,7 +90,6 @@ public:
 
     virtual AutoConfigDataSource* clone() const { return new AutoConfigDataSource(mdata); }
 
-    /* copied from ValueDataSource<T>::copy() in DataSources.inl */
     virtual AutoConfigDataSource* copy( std::map<const RTT::base::DataSourceBase*, RTT::base::DataSourceBase*>& replace ) const
     {
         // if somehow a copy exists, return the copy, otherwise return this (see Attribute copy)
@@ -86,9 +98,10 @@ public:
             return static_cast<AutoConfigDataSource*>( replace[this] );
         }
         // Other pieces in the code rely on insertion in the map :
-        replace[this] = const_cast<AutoConfigDataSource*>(this);
+        AutoConfigDataSource *clone = this->clone();
+        replace[this] = clone;
         // return this instead of a copy.
-        return const_cast<AutoConfigDataSource*>(this);
+        return clone;
     }
 
     /**
@@ -106,10 +119,39 @@ AutoConfig::AutoConfig()
 {
 }
 
+AutoConfig::AutoConfig(const AutoConfig &other)
+    : prefix_(other.prefix_), name(other.name), type(other.type)
+    , parent(other.parent), id(other.id), state(other.state)
+{
+    this->cloneOrUpdateProperties(other);
+}
+
 AutoConfig::AutoConfig(const RTT::PropertyBag &bag)
     : parent(), id(), state()
 {
-    this->fromProperties(bag);
+    *this = bag;
+}
+
+AutoConfig &AutoConfig::operator=(const AutoConfig &other)
+{
+    this->prefix_ = other.prefix_;
+    this->name = other.name;
+    this->type = other.type;
+    this->parent = other.parent;
+    this->id = other.id;
+    this->state = other.state;
+
+    this->clear();
+    this->cloneOrUpdateProperties(other);
+
+    return *this;
+}
+
+AutoConfig &AutoConfig::operator=(const RTT::PropertyBag &bag)
+{
+    this->clear();
+    this->cloneOrUpdateProperties(bag);
+    return *this;
 }
 
 AutoConfig::~AutoConfig()
@@ -350,19 +392,9 @@ uint32_t AutoConfig::__level__(const AutoConfig &config) const
     return 0;
 }
 
-bool AutoConfig::updateProperties(RTT::PropertyBag &target) const
+bool AutoConfig::cloneOrUpdateProperties(const RTT::PropertyBag &source)
 {
-    RTT::PropertyBag composed;
-    if (!RTT::types::composePropertyBag(*this, composed)) return false;
-    return RTT::updateProperties(target, composed);
-}
-
-bool AutoConfig::fromProperties(const RTT::PropertyBag &source)
-{
-    RTT::PropertyBag decomposed;
-    if (!RTT::types::decomposePropertyBag(source, decomposed)) return false;
-
-    for(RTT::PropertyBag::const_iterator i = decomposed.begin(); i != decomposed.end(); ++i) {
+    for(RTT::PropertyBag::const_iterator i = source.begin(); i != source.end(); ++i) {
         RTT::base::PropertyBase *pb = this->getProperty((*i)->getName());
         if (pb) {
             pb->update(*i);
@@ -371,7 +403,7 @@ bool AutoConfig::fromProperties(const RTT::PropertyBag &source)
 
         RTT::Property<RTT::PropertyBag> *sub = dynamic_cast<RTT::Property<RTT::PropertyBag> *>(*i);
         if (sub) {
-            AutoConfigDataSource *ds = new AutoConfigDataSource(sub->rvalue());
+            AutoConfigDataSource *ds = new AutoConfigDataSource(sub->getDataSource().get());
             ds->set().setType(sub->rvalue().getType());
             this->ownProperty(new RTT::Property<RTT::PropertyBag>(sub->getName(), sub->getDescription(), ds));
             continue;
@@ -543,6 +575,25 @@ const AutoConfig &AutoConfig::__getMin__(const ServerType *server)
 void AutoConfig::__refreshDescription__(const ServerType *server)
 {
     buildCache(server, server->getOwner());
+}
+
+// reference semantics without composition
+// We want user callbacks to see the decomposed bag.
+// RTT::updateProperties() can handle composition internally.
+bool Updater<AutoConfig>::propertiesFromConfig(AutoConfig &config, uint32_t, RTT::PropertyBag &bag)
+{
+    bag = config;
+    return true;
+}
+
+// decompose and refresh semantics
+bool Updater<AutoConfig>::configFromProperties(AutoConfig &config, const RTT::PropertyBag &bag)
+{
+    RTT::PropertyBag decomposed;
+    if (!RTT::types::decomposePropertyBag(bag, decomposed)) {
+        decomposed = bag;
+    }
+    return RTT::refreshProperties(config, decomposed);
 }
 
 } // namespace rtt_dynamic_reconfigure

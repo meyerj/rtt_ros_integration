@@ -56,8 +56,12 @@ public:
     bool state;
 
     AutoConfig();
-    AutoConfig(const RTT::PropertyBag &bag);
+    AutoConfig(const AutoConfig &other);
+    explicit AutoConfig(const RTT::PropertyBag &bag);
     ~AutoConfig();
+
+    AutoConfig &operator=(const AutoConfig &other);
+    AutoConfig &operator=(const RTT::PropertyBag &bag);
 
     bool __fromMessage__(dynamic_reconfigure::Config &msg, const AutoConfig &sample);
     static bool __fromMessage__(AutoConfig &config, dynamic_reconfigure::Config &msg, const AutoConfig &sample);
@@ -76,8 +80,7 @@ public:
 
     static void __refreshDescription__(const ServerType *server);
 
-    bool updateProperties(RTT::PropertyBag &) const;
-    bool fromProperties(const RTT::PropertyBag &);
+    bool cloneOrUpdateProperties(const RTT::PropertyBag &);
 
 private:
     struct Cache;
@@ -103,8 +106,8 @@ namespace rtt_dynamic_reconfigure {
 
 template <>
 struct Updater<AutoConfig> {
-    static bool propertiesFromConfig(AutoConfig &config, uint32_t, RTT::PropertyBag &bag) { return config.updateProperties(bag); }
-    static bool configFromProperties(AutoConfig &config, const RTT::PropertyBag &bag)     { return config.fromProperties(bag); }
+    static bool propertiesFromConfig(AutoConfig &config, uint32_t, RTT::PropertyBag &bag);
+    static bool configFromProperties(AutoConfig &config, const RTT::PropertyBag &bag);
 };
 
 template <>
@@ -121,6 +124,7 @@ struct dynamic_reconfigure_traits<AutoConfig> {
 
     static void toMessage(AutoConfig &config, dynamic_reconfigure::Config &message, const ServerType *) { config.__toMessage__(message); }
     static void fromMessage(AutoConfig &config, dynamic_reconfigure::Config &message, const ServerType *server) { config.__fromMessage__(message, server->getConfig()); }
+    static bool update(AutoConfig &config, const AutoConfig &source, const ServerType *) { return config.cloneOrUpdateProperties(source); }
     static void clamp(AutoConfig &config, const ServerType *server) { config.__clamp__(server); }
 
     static RTT::internal::AssignableDataSource<RTT::PropertyBag>::shared_ptr getDataSource(AutoConfig &config, const ServerType *) {
